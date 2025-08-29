@@ -1,2 +1,1 @@
-# ML-PYTHON
-Just a simple ML project
+Just a simple AI project from Hyūmanoidu Suisen
