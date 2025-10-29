@@ -12,7 +12,7 @@ from discriminator import Discriminator
 
 FOLDER = "images"
 FOLDER_RESULT = "new_images"
-MODELPTH = os.path.join(FOLDER_RESULT, "MODEL.pth")
+MODELPTH = ''
 BATCH_SIZE = 8
 IMAGE_N = 10
 IMAGE_SIZE = 64
