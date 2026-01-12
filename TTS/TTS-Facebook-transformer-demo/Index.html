@@ -1,1 +1,236 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สาธิตการแปลงข้อความเป็นเสียงภาษาไทย</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7fa;
+            color: #333;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        textarea {
+            width: 100%;
+            max-width: 600px;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .volume-control {
+            margin: 20px 0;
+            font-size: 16px;
+        }
+        .volume-control label {
+            display: inline-block;
+            width: 120px;
+            text-align: left;
+        }
+        .volume-control input[type="range"] {
+            width: 300px;
+            vertical-align: middle;
+        }
+        #player {
+            margin: 20px 0;
+            width: 100%;
+            max-width: 600px;
+        }
+        #status, #helpspeechStatus {
+            margin: 15px 0;
+            font-weight: bold;
+            min-height: 24px;
+        }
+        #download {
+            margin: 20px 0;
+        }
+        .note {
+            font-size: 14px;
+            color: #666;
+            margin-top: 40px;
+        }
+        .upload-section {
+            margin: 20px 0;
+        }
+        @media (max-width: 600px) {
+            .volume-control input[type="range"] {
+                width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>สาธิตการแปลงข้อความเป็นเสียงภาษาไทย</h1>
+    <p>แปลงข้อความภาษาไทยเป็นเสียงพูดธรรมชาติ</p>
 
+    <textarea id="text" rows="6" placeholder="พิมพ์ข้อความภาษาไทยที่นี่ เช่น สวัสดีครับ ยินดีต้อนรับสู่การแปลงข้อความเป็นเสียงภาษาไทย"></textarea>
+
+    <div class="upload-section">
+        <label for="helpspeechFile">อัปโหลดไฟล์ช่วยออกเสียง.json:</label><br>
+        <input type="file" id="helpspeechFile" accept="application/json">
+    </div>
+    <div id="helpspeechStatus"></div>
+
+    <button onclick="synthesize()">สร้างเสียง</button>
+
+    <div class="volume-control">
+        <label for="volumeSlider">ระดับเสียง:</label>
+        <input type="range" id="volumeSlider" min="0" max="100" value="100" step="1">
+    </div>
+
+    <div id="status"></div>
+
+    <audio id="player" controls></audio>
+
+    <div id="download"></div>
+
+    <div class="note">
+        <strong>หมายเหตุ:</strong><br>
+        • ต้องรันเซิร์ฟเวอร์ก่อนใช้งาน<br>
+        • หน้าเว็บนี้รองรับการเรียกข้ามโดเมน จึงสามารถเปิดไฟล์นี้โดยตรงหรือวางบนเว็บอื่นได้<br>
+        • เพิ่มตัวควบคุมระดับเสียงแบบกำหนดเอง เพื่อใช้งานได้ดีแม้บนมือถือ<br>
+        • สามารถอัปโหลดไฟล์ช่วยออกเสียง.json เพื่อปรับการออกเสียงให้ถูกต้องยิ่งขึ้น<br>
+        • หากต้องการเปลี่ยนที่อยู่ของบริการ ให้แก้ไขในส่วนสคริปต์ด้านล่าง
+    </div>
+
+    <script>
+        const apiUrl = 'http://localhost:8080/tts';
+
+        let currentAudioUrl = null;
+        let helpspeechDict = {};
+
+        const player = document.getElementById('player');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const helpspeechFileInput = document.getElementById('helpspeechFile');
+        const helpspeechStatus = document.getElementById('helpspeechStatus');
+
+        function escapeRegExp(str) {
+            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function updateVolume() {
+            const percent = volumeSlider.value;
+            player.volume = percent / 100;
+        }
+        volumeSlider.addEventListener('input', updateVolume);
+        player.addEventListener('volumechange', () => {
+            const percent = Math.round(player.volume * 100);
+            volumeSlider.value = percent;
+        });
+        updateVolume();
+
+        helpspeechFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) {
+                helpspeechStatus.textContent = '';
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+                        helpspeechDict = data;
+                        helpspeechStatus.textContent = 'โหลดไฟล์ช่วยออกเสียงสำเร็จ';
+                        helpspeechStatus.style.color = '#27ae60';
+                    } else {
+                        throw new Error('รูปแบบไม่ถูกต้อง');
+                    }
+                } catch (err) {
+                    helpspeechStatus.textContent = 'ไม่สามารถโหลดไฟล์ช่วยออกเสียงได้ (รูปแบบ JSON ไม่ถูกต้อง)';
+                    helpspeechStatus.style.color = '#e74c3c';
+                    helpspeechDict = {};
+                }
+            };
+            reader.onerror = () => {
+                helpspeechStatus.textContent = 'เกิดข้อผิดพลาดในการอ่านไฟล์';
+                helpspeechStatus.style.color = '#e74c3c';
+            };
+            reader.readAsText(file);
+        });
+
+        async function synthesize() {
+            let text = document.getElementById('text').value.trim();
+            if (!text) {
+                alert('กรุณาพิมพ์ข้อความภาษาไทย');
+                return;
+            }
+
+            let processedText = text;
+            if (Object.keys(helpspeechDict).length > 0) {
+                for (const key in helpspeechDict) {
+                    if (helpspeechDict.hasOwnProperty(key)) {
+                        const value = helpspeechDict[key];
+                        if (typeof value !== 'string') continue;
+                        const escapedKey = escapeRegExp(key.trim());
+                        if (!escapedKey) continue;
+                        const regex = new RegExp('\\b' + escapedKey + '\\b', 'gi');
+                        processedText = processedText.replace(regex, value.trim());
+                    }
+                }
+            }
+
+            const status = document.getElementById('status');
+            const downloadDiv = document.getElementById('download');
+
+            status.textContent = 'กำลังสร้างเสียง... (อาจใช้เวลาสักครู่)';
+            status.style.color = '#3498db';
+            player.src = '';
+            downloadDiv.innerHTML = '';
+
+            if (currentAudioUrl) {
+                URL.revokeObjectURL(currentAudioUrl);
+                currentAudioUrl = null;
+            }
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: processedText })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || `HTTP ${response.status}`);
+                }
+
+                const blob = await response.blob();
+                currentAudioUrl = URL.createObjectURL(blob);
+                player.src = currentAudioUrl;
+
+                downloadDiv.innerHTML = `<a href="${currentAudioUrl}" download="เสียงที่สร้าง.wav" style="display:inline-block; background:#27ae60; color:white; padding:10px 20px; border-radius:8px; text-decoration:none;">ดาวน์โหลดไฟล์เสียง</a>`;
+
+                status.textContent = 'เสร็จสิ้น! สามารถเล่นหรือดาวน์โหลดได้เลย';
+                status.style.color = '#27ae60';
+
+            } catch (e) {
+                status.textContent = 'เกิดข้อผิดพลาด: ' + e.message;
+                status.style.color = '#e74c3c';
+                console.error(e);
+            }
+        }
+    </script>
+</body>
+</html>
